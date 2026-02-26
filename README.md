@@ -1,4 +1,4 @@
-# LockPilot - Made by Maks
+<h1 align="center">LockPilot - Made by Maks 👾</h1>
 
 ![LockPilot Screenshot](apps/mac/assets/app-screenshot.png)
 
