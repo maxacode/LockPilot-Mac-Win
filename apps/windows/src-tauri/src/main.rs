@@ -42,6 +42,7 @@ enum UpdateChannel {
 enum RecurrencePreset {
     Daily,
     Weekdays,
+    SpecificDays,
     EveryNHours,
     EveryNMinutes,
 }
@@ -52,6 +53,7 @@ struct RecurrenceConfig {
     preset: RecurrencePreset,
     interval_hours: Option<u32>,
     interval_minutes: Option<u32>,
+    days_of_week: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -468,7 +470,9 @@ fn lock_workstation() {
 fn show_popup(msg: &str) {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
-    use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_OK, MB_ICONINFORMATION};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        MessageBoxW, MB_ICONINFORMATION, MB_OK, MB_SETFOREGROUND, MB_SYSTEMMODAL, MB_TOPMOST,
+    };
     use windows::core::PCWSTR;
 
     let title: Vec<u16> = OsStr::new("LockPilot")
@@ -485,7 +489,7 @@ fn show_popup(msg: &str) {
             None,
             PCWSTR(text.as_ptr()),
             PCWSTR(title.as_ptr()),
-            MB_OK | MB_ICONINFORMATION,
+            MB_OK | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND | MB_SYSTEMMODAL,
         );
     }
 }
@@ -523,6 +527,21 @@ fn validate_recurrence(recurrence: Option<&RecurrenceConfig>) -> Result<(), Stri
 
     match recurrence.preset {
         RecurrencePreset::Daily | RecurrencePreset::Weekdays => Ok(()),
+        RecurrencePreset::SpecificDays => {
+            let Some(days) = recurrence.days_of_week.as_ref() else {
+                return Err("Specific Days requires at least one day.".to_string());
+            };
+            if days.is_empty() {
+                return Err("Specific Days requires at least one day.".to_string());
+            }
+            if days.len() > 7 {
+                return Err("Specific Days can include at most 7 days.".to_string());
+            }
+            if days.iter().any(|day| parse_weekday(day).is_none()) {
+                return Err("Specific Days contains an invalid weekday.".to_string());
+            }
+            Ok(())
+        }
         RecurrencePreset::EveryNHours => {
             let Some(hours) = recurrence.interval_hours else {
                 return Err("Every N Hours requires an interval.".to_string());
@@ -587,6 +606,43 @@ fn compute_next_run(current_target: DateTime<Utc>, recurrence: &RecurrenceConfig
             }
             None
         }
+        RecurrencePreset::SpecificDays => {
+            let allowed_days = recurrence
+                .days_of_week
+                .as_ref()?
+                .iter()
+                .filter_map(|day| parse_weekday(day))
+                .collect::<Vec<_>>();
+            if allowed_days.is_empty() {
+                return None;
+            }
+
+            let time = current_target.time();
+            let mut date = current_target.date_naive() + ChronoDuration::days(1);
+            for _ in 0..14 {
+                if allowed_days.contains(&date.weekday()) {
+                    let candidate = Utc.from_utc_datetime(&date.and_time(time));
+                    if candidate > Utc::now() {
+                        return Some(candidate);
+                    }
+                }
+                date += ChronoDuration::days(1);
+            }
+            None
+        }
+    }
+}
+
+fn parse_weekday(input: &str) -> Option<Weekday> {
+    match input.trim().to_ascii_lowercase().as_str() {
+        "mon" | "monday" => Some(Weekday::Mon),
+        "tue" | "tues" | "tuesday" => Some(Weekday::Tue),
+        "wed" | "wednesday" => Some(Weekday::Wed),
+        "thu" | "thur" | "thurs" | "thursday" => Some(Weekday::Thu),
+        "fri" | "friday" => Some(Weekday::Fri),
+        "sat" | "saturday" => Some(Weekday::Sat),
+        "sun" | "sunday" => Some(Weekday::Sun),
+        _ => None,
     }
 }
 
