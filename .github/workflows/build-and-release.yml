@@ -313,7 +313,7 @@ jobs:
 
   update_readme_links:
     needs: [prepare_release, build_mac, build_windows]
-    if: ${{ needs.prepare_release.outputs.has_changes == 'true' && (needs.build_mac.result == 'success' || needs.build_windows.result == 'success') }}
+    if: ${{ always() && needs.prepare_release.outputs.has_changes == 'true' && (needs.build_mac.result == 'success' || needs.build_windows.result == 'success') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout latest branch head
