@@ -1,0 +1,265 @@
+name: Build + Release LockPilot
+
+on:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lockpilot-release-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  prepare_release:
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.targets.outputs.has_changes }}
+      build_mac: ${{ steps.targets.outputs.build_mac }}
+      build_windows: ${{ steps.targets.outputs.build_windows }}
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+      prerelease: ${{ steps.bump.outputs.prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            ui:
+              - 'packages/ui/**'
+            mac_backend:
+              - 'apps/mac/src-tauri/**'
+            windows_backend:
+              - 'apps/windows/src-tauri/**'
+
+      - name: Resolve build targets
+        id: targets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BUILD_MAC=false
+          BUILD_WINDOWS=false
+
+          if [ "${{ github.event_name }}" = 'workflow_dispatch' ]; then
+            BUILD_MAC=true
+            BUILD_WINDOWS=true
+          fi
+
+          if [ "${{ steps.changes.outputs.ui }}" = 'true' ] || [ "${{ steps.changes.outputs.mac_backend }}" = 'true' ]; then
+            BUILD_MAC=true
+          fi
+
+          if [ "${{ steps.changes.outputs.ui }}" = 'true' ] || [ "${{ steps.changes.outputs.windows_backend }}" = 'true' ]; then
+            BUILD_WINDOWS=true
+          fi
+
+          HAS_CHANGES=false
+          if [ "$BUILD_MAC" = true ] || [ "$BUILD_WINDOWS" = true ]; then
+            HAS_CHANGES=true
+          fi
+
+          echo "build_mac=$BUILD_MAC" >> "$GITHUB_OUTPUT"
+          echo "build_windows=$BUILD_WINDOWS" >> "$GITHUB_OUTPUT"
+          echo "has_changes=$HAS_CHANGES" >> "$GITHUB_OUTPUT"
+
+      - name: Bump release/app versions and tag
+        if: ${{ steps.targets.outputs.has_changes == 'true' }}
+        id: bump
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BUILD_MAC='${{ steps.targets.outputs.build_mac }}'
+          BUILD_WINDOWS='${{ steps.targets.outputs.build_windows }}'
+
+          VERSION=$(python3 - <<'PY'
+import json
+from pathlib import Path
+
+root = Path('.')
+release_version_file = root / 'release-version.txt'
+
+mac_conf = root / 'apps/mac/src-tauri/tauri.conf.json'
+win_conf = root / 'apps/windows/src-tauri/tauri.conf.json'
+mac_cargo = root / 'apps/mac/src-tauri/Cargo.toml'
+win_cargo = root / 'apps/windows/src-tauri/Cargo.toml'
+
+build_mac = '${{ steps.targets.outputs.build_mac }}' == 'true'
+build_windows = '${{ steps.targets.outputs.build_windows }}' == 'true'
+
+def parse(v):
+    a, b, c = v.strip().split('.')
+    return int(a), int(b), int(c)
+
+def bump_patch(v):
+    major, minor, patch = parse(v)
+    return f"{major}.{minor}.{patch + 1}"
+
+if release_version_file.exists():
+    current_release = release_version_file.read_text().strip()
+else:
+    mac_version = json.loads(mac_conf.read_text())['version']
+    win_version = json.loads(win_conf.read_text())['version']
+    current_release = max(mac_version, win_version, key=parse)
+
+next_version = bump_patch(current_release)
+release_version_file.write_text(next_version + "\n")
+
+def update_tauri_conf(path: Path, version: str):
+    conf = json.loads(path.read_text())
+    conf['version'] = version
+    path.write_text(json.dumps(conf, indent=2) + "\n")
+
+def update_cargo_toml(path: Path, version: str):
+    lines = path.read_text().splitlines()
+    out = []
+    in_package = False
+    changed = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped == '[package]':
+            in_package = True
+            out.append(line)
+            continue
+        if in_package and stripped.startswith('[') and stripped != '[package]':
+            in_package = False
+        if in_package and stripped.startswith('version = '):
+            out.append(f'version = "{version}"')
+            changed = True
+        else:
+            out.append(line)
+    if not changed:
+        raise SystemExit(f'Could not update package version in {path}')
+    path.write_text("\n".join(out) + "\n")
+
+if build_mac:
+    update_tauri_conf(mac_conf, next_version)
+    update_cargo_toml(mac_cargo, next_version)
+
+if build_windows:
+    update_tauri_conf(win_conf, next_version)
+    update_cargo_toml(win_cargo, next_version)
+
+print(next_version)
+PY
+)
+
+          BRANCH="${GITHUB_REF_NAME}"
+          if [ "$BRANCH" = "dev" ]; then
+            TAG="v${VERSION}-dev"
+            PRERELEASE="true"
+          else
+            TAG="v${VERSION}"
+            PRERELEASE="false"
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add release-version.txt
+          if [ "$BUILD_MAC" = "true" ]; then
+            git add apps/mac/src-tauri/tauri.conf.json apps/mac/src-tauri/Cargo.toml
+          fi
+          if [ "$BUILD_WINDOWS" = "true" ]; then
+            git add apps/windows/src-tauri/tauri.conf.json apps/windows/src-tauri/Cargo.toml
+          fi
+
+          if git diff --cached --quiet; then
+            echo "No version changes to commit"
+          else
+            git commit -m "chore(ci): bump release version to ${VERSION} [skip ci]"
+            git push origin "$BRANCH"
+          fi
+
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            git tag -d "${TAG}"
+          fi
+          git tag "${TAG}"
+          git push origin "refs/tags/${TAG}" --force
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
+
+  build_release:
+    needs: prepare_release
+    if: ${{
+      needs.prepare_release.outputs.has_changes == 'true' &&
+      (
+        (matrix.platform == 'mac' && needs.prepare_release.outputs.build_mac == 'true') ||
+        (matrix.platform == 'windows' && needs.prepare_release.outputs.build_windows == 'true')
+      )
+      }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: mac
+            os: macos-latest
+            app_dir: apps/mac
+            artifact_name: lockpilot-mac
+          - platform: windows
+            os: windows-latest
+            app_dir: apps/windows
+            artifact_name: lockpilot-windows
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout latest branch head (includes version bump)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Sync shared UI
+        shell: bash
+        run: bash scripts/sync-shared-ui.sh
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend deps (if package.json exists)
+        shell: bash
+        working-directory: ${{ matrix.app_dir }}
+        run: |
+          if [ -f package.json ]; then
+            npm ci
+          fi
+
+      - name: Build + publish release assets
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: ${{ matrix.app_dir }}
+          tagName: ${{ needs.prepare_release.outputs.tag }}
+          releaseName: LockPilot ${{ needs.prepare_release.outputs.tag }}
+          releaseBody: |
+            Automated release from `${{ github.ref_name }}`
+            Version: `${{ needs.prepare_release.outputs.version }}`
+            Platform: `${{ matrix.platform }}`
+            Commit: `${{ github.sha }}`
+          releaseDraft: false
+          prerelease: ${{ needs.prepare_release.outputs.prerelease }}
+
+      - name: Upload CI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}-${{ needs.prepare_release.outputs.tag }}-${{ github.sha }}
+          path: |
+            ${{ matrix.app_dir }}/src-tauri/target/release/bundle/**

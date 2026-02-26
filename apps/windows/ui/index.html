@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LockPilot - Made by Maks</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="card">
+        <h1>LockPilot - Made by Maks 👾 </h1>
+        <p class="subtitle">Schedule multiple system actions for exact times.</p>
+
+        <form id="timer-form" class="form">
+          <label>
+            Action
+            <select id="action" required>
+              <option value="popup">Popup Message</option>
+              <option value="lock">Lock Screen</option>
+              <option value="shutdown">Shut Down Mac</option>
+              <option value="reboot">Restart Mac</option>
+            </select>
+          </label>
+
+          <label>
+            Trigger Time
+            <input id="target-time" type="datetime-local" step="1" required />
+          </label>
+
+          <label>
+            Repeat
+            <select id="recurrence-preset">
+              <option value="none">One-time</option>
+              <option value="daily">Daily</option>
+              <option value="weekdays">Weekdays</option>
+              <option value="every_n_hours">Every N Hours</option>
+              <option value="every_n_minutes">Every N Minutes</option>
+            </select>
+          </label>
+
+          <label id="interval-wrap" class="hidden">
+            Interval
+            <input id="interval-hours" type="number" min="1" max="1440" value="2" />
+          </label>
+
+          <label id="message-wrap">
+            Popup Message
+            <textarea id="message" rows="3" placeholder="Time to stop and rest" required></textarea>
+          </label>
+
+          <button type="submit">Add Timer</button>
+        </form>
+
+        <p id="status" class="status"></p>
+      </section>
+
+      <section class="card">
+        <div class="header-row">
+          <h2>Active Timers</h2>
+          <button id="refresh" class="secondary">Refresh</button>
+        </div>
+        <ul id="timers" class="timer-list"></ul>
+      </section>
+
+      <section class="card">
+        <div class="header-row">
+          <h2>Updates</h2>
+          <button id="check-updates" class="secondary">Check Now</button>
+        </div>
+        <p class="timer-meta">Current Version: <strong id="current-version">-</strong></p>
+        <label>
+          Update Channel
+          <select id="update-channel">
+            <option value="main">main (stable)</option>
+            <option value="dev">dev (prerelease)</option>
+          </select>
+        </label>
+        <label class="inline-toggle">
+          <input id="auto-check-updates" type="checkbox" />
+          Check for updates on launch
+        </label>
+        <p id="update-status" class="status"></p>
+
+        <div id="update-result" class="update-panel hidden">
+          <p class="timer-meta">
+            New version: <strong id="latest-version">-</strong>
+          </p>
+          <p id="latest-notes" class="timer-meta"></p>
+          <button id="install-latest">Install Latest In Channel</button>
+        </div>
+
+        <div class="rollback">
+          <h3>Rollback</h3>
+          <p class="timer-meta">Pick an older release and reinstall it.</p>
+          <div class="rollback-row">
+            <select id="rollback-version"></select>
+            <button id="rollback-install" class="secondary">Install Selected</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

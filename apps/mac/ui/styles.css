@@ -1,0 +1,236 @@
+:root {
+  color-scheme: light;
+  --bg: #e7f2f6;
+  --panel: rgba(247, 253, 252, 0.58);
+  --ink: #123038;
+  --muted: #4f7480;
+  --line: rgba(161, 205, 213, 0.72);
+  --brand: #1f8cb2;
+  --danger: #a13b4d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 14% 8%, rgba(143, 236, 212, 0.7) 0%, transparent 35%),
+    radial-gradient(circle at 85% 22%, rgba(132, 195, 255, 0.65) 0%, transparent 36%),
+    radial-gradient(circle at 20% 84%, rgba(207, 175, 255, 0.42) 0%, transparent 36%),
+    var(--bg);
+  min-height: 100vh;
+}
+
+.app {
+  width: min(60vw, 840px);
+  margin: 0 auto;
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.card {
+  background: var(--panel);
+  border-radius: 16px;
+  padding: 18px;
+  border: none;
+  box-shadow: 0 10px 28px rgba(18, 48, 56, 0.1);
+  backdrop-filter: blur(14px) saturate(1.08);
+  -webkit-backdrop-filter: blur(14px) saturate(1.08);
+  position: relative;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 24px;
+  bottom: 24px;
+  width: 1px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(143, 236, 212, 0.2), rgba(132, 195, 255, 0.2), rgba(207, 175, 255, 0.2));
+}
+
+.card::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  top: 24px;
+  bottom: 24px;
+  width: 1px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(132, 195, 255, 0.18), rgba(207, 175, 255, 0.18), rgba(143, 236, 212, 0.18));
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.subtitle {
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.form {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+select,
+input,
+textarea,
+button {
+  font: inherit;
+}
+
+select,
+input,
+textarea {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+button {
+  border: none;
+  border-radius: 10px;
+  padding: 11px 12px;
+  background: var(--brand);
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: rgba(255, 255, 255, 0.66);
+  color: #1d3b48;
+  border: none;
+}
+
+button.danger {
+  background: var(--danger);
+}
+
+.status {
+  margin-top: 10px;
+  color: var(--muted);
+  min-height: 20px;
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.timer-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.timer-item {
+  border: none;
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 4px 16px rgba(20, 56, 64, 0.08);
+}
+
+.timer-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.timer-meta {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.empty {
+  color: var(--muted);
+  border: none;
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.inline-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.update-panel {
+  margin-top: 10px;
+  border: none;
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: 0 4px 14px rgba(20, 56, 64, 0.07);
+}
+
+.rollback {
+  margin-top: 14px;
+  border-top: none;
+  padding-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.rollback-row {
+  display: flex;
+  gap: 10px;
+}
+
+.rollback-row select {
+  flex: 1;
+}
+
+.hidden {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .app {
+    padding: 14px;
+    width: 100%;
+  }
+
+  .timer-top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .rollback-row {
+    flex-direction: column;
+  }
+}
