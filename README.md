@@ -2,8 +2,8 @@
 
 ![LockPilot Screenshot](apps/mac/assets/app-screenshot.png)
 
-## [Download for macOS](https://github.com/maxacode/LockPilot-Mac-Win/releases/latest)
-## [Download for Windows](https://github.com/maxacode/LockPilot-Mac-Win/releases/latest)
+## [Download for macOS](https://github.com/maxacode/LockPilot-Mac-Win/releases/download/v1.0.2/LockPilot_1.0.2_aarch64.dmg)
+## [Download for Windows](https://github.com/maxacode/LockPilot-Mac-Win/releases/download/v1.0.2/LockPilot_1.0.2_x64-setup.exe)
 
 Use the latest GitHub release page above and pick the correct installer:
 - macOS: `.dmg`
