@@ -196,8 +196,8 @@ const renderUpdateResult = (update) => {
   updateResultEl.classList.remove("hidden");
   latestVersionEl.textContent = update.tag;
   latestNotesEl.textContent = update.notes?.trim()
-    ? update.notes.split("\n")[0]
-    : "No release notes provided.";
+    ? update.notes.trim()
+    : "What's New:\n- Backend Adjustments\n- Optimizations";
 };
 
 const loadRollbackVersions = async () => {
@@ -248,8 +248,8 @@ const installChannelUpdate = async () => {
 
   try {
     setUpdateLoading(true, `Downloading ${channel} update...`);
-    const result = await invoke("install_channel_update", { channel });
-    showUpdateStatus(`${result}. Complete install from the opened installer.`);
+    await invoke("install_channel_update", { channel });
+    showUpdateStatus("Installer opened. Follow the prompts to install the update.");
   } catch (err) {
     showUpdateStatus(`Install failed: ${String(err)}`, true);
   } finally {
@@ -260,8 +260,8 @@ const installChannelUpdate = async () => {
 const installTag = async (tag) => {
   try {
     setUpdateLoading(true, `Downloading ${tag}...`);
-    const result = await invoke("install_release", { tag });
-    showUpdateStatus(`${result}. Complete install from the opened installer.`);
+    await invoke("install_release", { tag });
+    showUpdateStatus("Installer opened. Follow the prompts to install the update.");
   } catch (err) {
     showUpdateStatus(`Install failed: ${String(err)}`, true);
   } finally {

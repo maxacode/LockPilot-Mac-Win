@@ -228,10 +228,17 @@ jobs:
           tagName: ${{ needs.prepare_release.outputs.tag }}
           releaseName: LockPilot ${{ needs.prepare_release.outputs.tag }}
           releaseBody: |
-            Automated release from `${{ github.ref_name }}`
-            Version: `${{ needs.prepare_release.outputs.version }}`
-            Platform: `mac`
-            Commit: `${{ github.sha }}`
+            What's New
+            - Shared UI improvements and polish
+            - macOS packaging and installer updates
+            - Backend Adjustments
+            - Optimizations
+
+            Build Metadata
+            - Channel: `${{ github.ref_name }}`
+            - Version: `${{ needs.prepare_release.outputs.version }}`
+            - Platform: `mac`
+            - Commit: `${{ github.sha }}`
           releaseDraft: false
           prerelease: ${{ needs.prepare_release.outputs.prerelease }}
 
@@ -281,10 +288,17 @@ jobs:
           tagName: ${{ needs.prepare_release.outputs.tag }}
           releaseName: LockPilot ${{ needs.prepare_release.outputs.tag }}
           releaseBody: |
-            Automated release from `${{ github.ref_name }}`
-            Version: `${{ needs.prepare_release.outputs.version }}`
-            Platform: `windows`
-            Commit: `${{ github.sha }}`
+            What's New
+            - Shared UI improvements and polish
+            - Windows packaging and installer updates
+            - Backend Adjustments
+            - Optimizations
+
+            Build Metadata
+            - Channel: `${{ github.ref_name }}`
+            - Version: `${{ needs.prepare_release.outputs.version }}`
+            - Platform: `windows`
+            - Commit: `${{ github.sha }}`
           releaseDraft: false
           prerelease: ${{ needs.prepare_release.outputs.prerelease }}
 

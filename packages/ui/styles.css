@@ -198,6 +198,10 @@ button.danger {
   box-shadow: 0 4px 14px rgba(20, 56, 64, 0.07);
 }
 
+#latest-notes {
+  white-space: pre-line;
+}
+
 .rollback {
   margin-top: 14px;
   border-top: none;
