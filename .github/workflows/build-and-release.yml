@@ -231,6 +231,7 @@ jobs:
             What's New
             - Shared UI improvements and polish
             - macOS packaging and installer updates
+            - Fixed rollback release selection for dev/stable channels
             - Backend Adjustments
             - Optimizations
 
@@ -291,6 +292,7 @@ jobs:
             What's New
             - Shared UI improvements and polish
             - Windows packaging and installer updates
+            - Fixed rollback release selection for dev/stable channels
             - Backend Adjustments
             - Optimizations
 

@@ -318,7 +318,7 @@ fn schedule_timer_thread(
 
 #[tauri::command]
 fn list_release_versions() -> Result<Vec<ReleaseVersion>, String> {
-    let mut releases = stable_releases(fetch_releases()?);
+    let mut releases = rollback_releases(fetch_releases()?);
     releases.sort_by(release_version_desc);
 
     Ok(releases
@@ -386,7 +386,7 @@ fn install_channel_update(channel: UpdateChannel) -> Result<String, String> {
 
 #[tauri::command]
 fn install_release(tag: String) -> Result<String, String> {
-    let releases = stable_releases(fetch_releases()?);
+    let releases = rollback_releases(fetch_releases()?);
     let release = releases
         .into_iter()
         .find(|release| tags_match(&release.tag_name, &tag))
@@ -655,10 +655,10 @@ fn release_version_desc(a: &GithubRelease, b: &GithubRelease) -> std::cmp::Order
     bv.cmp(&av)
 }
 
-fn stable_releases(releases: Vec<GithubRelease>) -> Vec<GithubRelease> {
+fn rollback_releases(releases: Vec<GithubRelease>) -> Vec<GithubRelease> {
     releases
         .into_iter()
-        .filter(|release| !release.draft && !release.prerelease)
+        .filter(|release| !release.draft)
         .filter(|release| normalize_version(&release.tag_name).is_some())
         .filter(|release| has_supported_asset(release))
         .collect()
