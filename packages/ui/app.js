@@ -1,5 +1,6 @@
 const { invoke } = window.__TAURI__.core;
 const { getVersion } = window.__TAURI__.app;
+const { listen } = window.__TAURI__.event;
 
 const form = document.getElementById("timer-form");
 const actionInput = document.getElementById("action");
@@ -11,6 +12,9 @@ const recurrenceChoiceBoxes = document.querySelectorAll(".choice-box[data-recurr
 const quickChipButtons = document.querySelectorAll("[data-quick-minutes]");
 const quickCustomInput = document.getElementById("custom-minutes-input");
 const quickCustomApplyBtn = document.getElementById("quick-custom-apply");
+const preWarnRow = document.getElementById("prewarn-row");
+const customPrewarnInput = document.getElementById("custom-prewarn-input");
+const prewarnCustomApplyBtn = document.getElementById("prewarn-custom-apply");
 const intervalWrap = document.getElementById("interval-wrap");
 const intervalHoursInput = document.getElementById("interval-hours");
 const specificDaysWrap = document.getElementById("specific-days-wrap");
@@ -34,11 +38,109 @@ const rollbackVersionSelect = document.getElementById("rollback-version");
 const rollbackInstallBtn = document.getElementById("rollback-install");
 const updateLoadingEl = document.getElementById("update-loading");
 const updateLoadingTextEl = document.getElementById("update-loading-text");
+const preActionModalEl = document.getElementById("pre-action-modal");
+const preActionTitleEl = document.getElementById("pre-action-title");
+const preActionLineEl = document.getElementById("pre-action-line");
+const preActionSnoozeBtn = document.getElementById("pre-action-snooze");
+const preActionSkipBtn = document.getElementById("pre-action-skip");
+const preActionRunBtn = document.getElementById("pre-action-run");
 
 const AUTO_UPDATE_KEY = "lockpilot.autoCheckUpdates";
 const UPDATE_CHANNEL_KEY = "lockpilot.updateChannel";
 let currentVersion = "";
 let latestUpdate = null;
+let activePreActionPromptId = null;
+let activePreActionActionLabel = "";
+let activePreActionSnoozeMinutes = 10;
+let preActionCountdown = 0;
+let preActionCountdownInterval = null;
+
+const getPreWarningInputs = () => document.querySelectorAll('input[name="prewarn"]');
+
+const actionLabel = (action) => {
+  if (action === "lock") {
+    return "Lock screen";
+  }
+  if (action === "shutdown") {
+    return "Shut down";
+  }
+  if (action === "reboot") {
+    return "Restart";
+  }
+  return "Action";
+};
+
+const renderPreActionLine = () => {
+  if (!preActionLineEl) {
+    return;
+  }
+  preActionLineEl.textContent = `${activePreActionActionLabel} in ${Math.max(0, preActionCountdown)}s`;
+};
+
+const clearPreActionCountdown = () => {
+  if (preActionCountdownInterval) {
+    window.clearInterval(preActionCountdownInterval);
+    preActionCountdownInterval = null;
+  }
+};
+
+const closePreActionModal = () => {
+  clearPreActionCountdown();
+  if (preActionModalEl) {
+    preActionModalEl.classList.add("hidden");
+  }
+  activePreActionPromptId = null;
+};
+
+const openPreActionModal = (payload) => {
+  activePreActionPromptId = payload.promptId;
+  activePreActionActionLabel = actionLabel(payload.action);
+  activePreActionSnoozeMinutes = Number(payload.snoozeMinutes || 10);
+  preActionCountdown = Number(payload.countdownSeconds || 12);
+  if (preActionTitleEl) {
+    preActionTitleEl.textContent = `${activePreActionActionLabel} incoming`;
+  }
+  if (preActionSnoozeBtn) {
+    preActionSnoozeBtn.textContent = `Snooze ${activePreActionSnoozeMinutes} min`;
+  }
+  const warningMinutes = Number(payload.warningMinutes || 0);
+  if (preActionLineEl) {
+    preActionLineEl.textContent =
+      warningMinutes > 0
+        ? `${activePreActionActionLabel} in ${warningMinutes} min`
+        : `${activePreActionActionLabel} in under 1 min`;
+  }
+  if (preActionModalEl) {
+    preActionModalEl.classList.remove("hidden");
+  }
+
+  clearPreActionCountdown();
+  preActionCountdownInterval = window.setInterval(() => {
+    preActionCountdown -= 1;
+    renderPreActionLine();
+    if (preActionCountdown <= 0) {
+      closePreActionModal();
+    }
+  }, 1000);
+};
+
+const resolvePreAction = async (decision) => {
+  if (!activePreActionPromptId) {
+    return;
+  }
+  const promptId = activePreActionPromptId;
+  closePreActionModal();
+  try {
+    await invoke("resolve_pre_action", {
+      request: {
+        promptId,
+        decision,
+      },
+    });
+  } catch (err) {
+    showStatus(`Could not resolve warning: ${String(err)}`, true);
+  }
+};
 
 const showStatus = (text, isError = false) => {
   statusEl.textContent = text;
@@ -345,6 +447,10 @@ form.addEventListener("submit", async (event) => {
   const selectedSpecificDays = [...specificDayInputs]
     .filter((input) => input.checked)
     .map((input) => input.value);
+  const preWarningMinutes = [...getPreWarningInputs()]
+    .filter((input) => input.checked)
+    .map((input) => Number.parseInt(input.value, 10))
+    .filter((value) => Number.isInteger(value) && value > 0);
 
   if (recurrencePreset === "specific_days" && !selectedSpecificDays.length) {
     showStatus("Select at least one day for Specific Days.", true);
@@ -365,6 +471,7 @@ form.addEventListener("submit", async (event) => {
     action: actionInput.value,
     targetTime: new Date(targetTimeInput.value).toISOString(),
     recurrence,
+    preWarningMinutes,
     message: actionInput.value === "popup" ? messageInput.value : null,
   };
 
@@ -442,9 +549,52 @@ if (quickCustomApplyBtn) {
   });
 }
 
+if (prewarnCustomApplyBtn) {
+  prewarnCustomApplyBtn.addEventListener("click", () => {
+    const minutes = Number.parseInt(String(customPrewarnInput?.value || ""), 10);
+    if (!Number.isInteger(minutes) || minutes <= 0) {
+      showStatus("Pre warning custom minutes must be a positive number.", true);
+      return;
+    }
+
+    const existing = [...getPreWarningInputs()].find((input) => Number.parseInt(input.value, 10) === minutes);
+    if (existing) {
+      existing.checked = true;
+      return;
+    }
+
+    if (!preWarnRow) {
+      return;
+    }
+
+    const label = document.createElement("label");
+    label.className = "prewarn-chip";
+    label.innerHTML = `<input type=\"checkbox\" name=\"prewarn\" value=\"${minutes}\" checked />${minutes}m`;
+    preWarnRow.insertBefore(label, customPrewarnInput);
+  });
+}
+
 if (setNowBtn) {
   setNowBtn.addEventListener("click", () => {
     setTriggerToNow();
+  });
+}
+
+if (preActionSnoozeBtn) {
+  preActionSnoozeBtn.addEventListener("click", () => {
+    resolvePreAction("snooze_10");
+  });
+}
+
+if (preActionSkipBtn) {
+  preActionSkipBtn.addEventListener("click", () => {
+    resolvePreAction("cancel_action");
+  });
+}
+
+if (preActionRunBtn) {
+  preActionRunBtn.addEventListener("click", () => {
+    resolvePreAction("run_now");
   });
 }
 
@@ -471,6 +621,10 @@ updateChannelSelect.addEventListener("change", () => {
 });
 
 const initialize = async () => {
+  await listen("pre_action_warning", (event) => {
+    openPreActionModal(event.payload);
+  });
+
   setTriggerToNow();
   toggleMessage();
   toggleRecurrence();

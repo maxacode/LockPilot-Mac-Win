@@ -21,40 +21,39 @@
               <option value="reboot">Restart Mac</option>
             </select>
           </label>
-          <section class="choice-preview" aria-label="Action options preview">
-            <div class="preview-head">
-              <strong>Action</strong>
-            </div>
-            <div class="choice-grid choice-grid-4">
-              <button type="button" class="choice-box is-active" data-action="popup">Popup Message</button>
-              <button type="button" class="choice-box" data-action="lock">Lock Screen</button>
-              <button type="button" class="choice-box" data-action="shutdown">Shut Down</button>
-              <button type="button" class="choice-box" data-action="reboot">Restart</button>
+          <section class="choice-preview action-inline" aria-label="Action options preview">
+            <div class="action-inline-row">
+              <strong class="action-inline-label">Action</strong>
+              <div class="choice-grid choice-grid-4 action-inline-grid">
+                <button type="button" class="choice-box is-active" data-action="popup">Popup Message</button>
+                <button type="button" class="choice-box" data-action="lock">Lock Screen</button>
+                <button type="button" class="choice-box" data-action="shutdown">Shut Down</button>
+                <button type="button" class="choice-box" data-action="reboot">Restart</button>
+              </div>
             </div>
           </section>
 
-          <div class="time-message-row">
-            <label>
-              Trigger Time
-              <span class="trigger-time-inline">
-                <input id="target-time" type="datetime-local" step="1" required />
-                <button type="button" id="set-now" class="secondary now-btn">Now</button>
-              </span>
-            </label>
+          <section class="choice-preview" aria-label="Time and message">
+            <div class="time-message-row">
+              <label>
+                Time
+                <span class="trigger-time-inline">
+                  <input id="target-time" type="datetime-local" step="1" required />
+                  <button type="button" id="set-now" class="secondary now-btn">Now</button>
+                </span>
+              </label>
 
-            <label id="message-wrap">
-              Popup Message
-              <textarea id="message" rows="1" placeholder="Time to stop and rest"></textarea>
-            </label>
-          </div>
+              <label id="message-wrap">
+                Message
+                <textarea id="message" rows="1" placeholder="Time to stop and rest"></textarea>
+              </label>
+            </div>
+          </section>
 
           <section class="quick-add-preview" aria-label="Quick add feature preview">
-            <div class="preview-head">
-              <strong>Quick Add Time</strong>
-            </div>
-
             <div class="feature-grid">
               <div class="feature-tile">
+                <span class="feature-kicker">+Time</span>
                 <span class="chip-row">
                   <button type="button" class="chip-btn" data-quick-minutes="1">+1 min</button>
                   <button type="button" class="chip-btn" data-quick-minutes="5">+5 min</button>
@@ -64,6 +63,17 @@
                   <button type="button" class="chip-btn" data-quick-minutes="60">+1 hr</button>
                   <input id="custom-minutes-input" type="number" min="1" step="1" placeholder="Custom min" />
                   <button type="button" id="quick-custom-apply" class="quick-apply-btn">Apply</button>
+                </span>
+              </div>
+
+              <div class="feature-tile">
+                <span class="feature-kicker">Pre Warning</span>
+                <span class="prewarn-row" id="prewarn-row">
+                  <label class="prewarn-chip"><input type="checkbox" name="prewarn" value="1" checked />1m</label>
+                  <label class="prewarn-chip"><input type="checkbox" name="prewarn" value="5" />5m</label>
+                  <label class="prewarn-chip"><input type="checkbox" name="prewarn" value="10" />10m</label>
+                  <input id="custom-prewarn-input" type="number" min="1" step="1" placeholder="Custom min" />
+                  <button type="button" id="prewarn-custom-apply" class="quick-apply-btn">Add</button>
                 </span>
               </div>
             </div>
@@ -163,6 +173,18 @@
         </div>
       </section>
     </main>
+
+    <div id="pre-action-modal" class="pre-action-modal hidden" aria-live="assertive" aria-modal="true" role="dialog">
+      <div class="pre-action-card">
+        <h2 id="pre-action-title">Scheduled action incoming</h2>
+        <p id="pre-action-line" class="pre-action-line">Lock screen in 12s</p>
+        <div class="pre-action-buttons">
+          <button id="pre-action-snooze" class="secondary">Snooze 10 min</button>
+          <button id="pre-action-skip" class="secondary">Cancel Action</button>
+          <button id="pre-action-run" class="danger">Run now</button>
+        </div>
+      </div>
+    </div>
 
     <div id="update-loading" class="update-loading hidden" aria-live="polite" aria-busy="true">
       <div class="update-loading-card">

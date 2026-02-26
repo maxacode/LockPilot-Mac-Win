@@ -24,15 +24,15 @@ body {
 .app {
   width: min(96vw, 900px);
   margin: 0 auto;
-  padding: 24px;
+  padding: 12px;
   display: grid;
-  gap: 16px;
+  gap: 4px;
 }
 
 .card {
   background: var(--panel);
   border-radius: 16px;
-  padding: 18px;
+  padding: 9px;
   border: 1px solid rgba(161, 205, 213, 0.72);
   box-shadow: 0 3px 10px rgba(18, 48, 56, 0.08);
 }
@@ -120,7 +120,7 @@ h3 {
 .feature-grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .feature-tile {
@@ -213,6 +213,42 @@ h3 {
   cursor: pointer;
 }
 
+.prewarn-row {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.prewarn-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.prewarn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(31, 140, 178, 0.24);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(31, 140, 178, 0.08);
+  color: #17596f;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.prewarn-chip input {
+  margin: 0;
+}
+
+#custom-prewarn-input {
+  width: 120px;
+  min-height: 34px;
+  padding: 6px 8px;
+}
+
 
 .choice-preview {
   border: 1px solid var(--line);
@@ -231,6 +267,21 @@ h3 {
 
 .choice-grid-4 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.action-inline-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.action-inline-label {
+  font-size: 1rem;
+}
+
+.action-inline-grid {
+  gap: 8px;
 }
 
 .choice-box {
@@ -427,6 +478,60 @@ button.danger {
   display: none;
 }
 
+.pre-action-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 14, 28, 0.66);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  display: grid;
+  place-items: center;
+  z-index: 10000;
+}
+
+.pre-action-modal.hidden {
+  display: none;
+}
+
+.pre-action-card {
+  width: min(620px, 92vw);
+  border-radius: 18px;
+  padding: 13px;
+  background: linear-gradient(120deg, #0e1933 0%, #0a1225 100%);
+  border: 1px solid rgba(132, 195, 255, 0.25);
+  box-shadow: 0 26px 60px rgba(2, 6, 15, 0.48);
+  color: #e7eef9;
+  display: grid;
+  gap: 16px;
+}
+
+.pre-action-card h2 {
+  margin: 0;
+  color: #ecf2fb;
+  font-size: 2.05rem;
+  line-height: 1.1;
+}
+
+.pre-action-line {
+  margin: 0;
+  color: #b9c9df;
+  font-size: 2rem;
+  font-weight: 600;
+}
+
+.pre-action-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pre-action-buttons button {
+  min-height: 56px;
+  border-radius: 16px;
+  min-width: 160px;
+  font-size: 1.15rem;
+}
+
 .update-loading-card {
   min-width: 280px;
   max-width: 90vw;
@@ -469,6 +574,27 @@ button.danger {
     grid-template-columns: 1fr;
   }
 
+  .action-inline-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .action-inline-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pre-action-card h2 {
+    font-size: 1.6rem;
+  }
+
+  .pre-action-line {
+    font-size: 1.4rem;
+  }
+
+  .pre-action-buttons button {
+    width: 100%;
+  }
+
   .time-message-row {
     grid-template-columns: 1fr;
   }
@@ -480,5 +606,9 @@ button.danger {
 
   .rollback-row {
     flex-direction: column;
+  }
+
+  .feature-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
