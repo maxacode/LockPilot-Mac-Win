@@ -1,6 +1,6 @@
 [package]
 name = "lockpilot"
-version = "0.4.17"
+version = "0.4.18"
 description = "Windows timer actions app"
 authors = ["Maks"]
 license = ""
