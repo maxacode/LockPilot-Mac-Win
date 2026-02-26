@@ -50,21 +50,21 @@ jobs:
           BUILD_MAC=false
           BUILD_WINDOWS=false
 
-          if [ "${{ github.event_name }}" = 'workflow_dispatch' ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             BUILD_MAC=true
             BUILD_WINDOWS=true
           fi
 
-          if [ "${{ steps.changes.outputs.ui }}" = 'true' ] || [ "${{ steps.changes.outputs.mac_backend }}" = 'true' ]; then
+          if [ "${{ steps.changes.outputs.ui }}" = "true" ] || [ "${{ steps.changes.outputs.mac_backend }}" = "true" ]; then
             BUILD_MAC=true
           fi
 
-          if [ "${{ steps.changes.outputs.ui }}" = 'true' ] || [ "${{ steps.changes.outputs.windows_backend }}" = 'true' ]; then
+          if [ "${{ steps.changes.outputs.ui }}" = "true" ] || [ "${{ steps.changes.outputs.windows_backend }}" = "true" ]; then
             BUILD_WINDOWS=true
           fi
 
           HAS_CHANGES=false
-          if [ "$BUILD_MAC" = true ] || [ "$BUILD_WINDOWS" = true ]; then
+          if [ "$BUILD_MAC" = "true" ] || [ "$BUILD_WINDOWS" = "true" ]; then
             HAS_CHANGES=true
           fi
 
@@ -73,8 +73,8 @@ jobs:
           echo "has_changes=$HAS_CHANGES" >> "$GITHUB_OUTPUT"
 
       - name: Bump release/app versions and tag
-        if: ${{ steps.targets.outputs.has_changes == 'true' }}
         id: bump
+        if: ${{ steps.targets.outputs.has_changes == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -82,77 +82,77 @@ jobs:
           BUILD_MAC='${{ steps.targets.outputs.build_mac }}'
           BUILD_WINDOWS='${{ steps.targets.outputs.build_windows }}'
 
-          VERSION=$(python3 - <<'PY'
-import json
-from pathlib import Path
+          VERSION=$(python3 <<'PY'
+          import json
+          from pathlib import Path
 
-root = Path('.')
-release_version_file = root / 'release-version.txt'
+          root = Path('.')
+          release_version_file = root / 'release-version.txt'
 
-mac_conf = root / 'apps/mac/src-tauri/tauri.conf.json'
-win_conf = root / 'apps/windows/src-tauri/tauri.conf.json'
-mac_cargo = root / 'apps/mac/src-tauri/Cargo.toml'
-win_cargo = root / 'apps/windows/src-tauri/Cargo.toml'
+          mac_conf = root / 'apps/mac/src-tauri/tauri.conf.json'
+          win_conf = root / 'apps/windows/src-tauri/tauri.conf.json'
+          mac_cargo = root / 'apps/mac/src-tauri/Cargo.toml'
+          win_cargo = root / 'apps/windows/src-tauri/Cargo.toml'
 
-build_mac = '${{ steps.targets.outputs.build_mac }}' == 'true'
-build_windows = '${{ steps.targets.outputs.build_windows }}' == 'true'
+          build_mac = '${{ steps.targets.outputs.build_mac }}' == 'true'
+          build_windows = '${{ steps.targets.outputs.build_windows }}' == 'true'
 
-def parse(v):
-    a, b, c = v.strip().split('.')
-    return int(a), int(b), int(c)
+          def parse(v):
+              a, b, c = v.strip().split('.')
+              return int(a), int(b), int(c)
 
-def bump_patch(v):
-    major, minor, patch = parse(v)
-    return f"{major}.{minor}.{patch + 1}"
+          def bump_patch(v):
+              major, minor, patch = parse(v)
+              return f"{major}.{minor}.{patch + 1}"
 
-if release_version_file.exists():
-    current_release = release_version_file.read_text().strip()
-else:
-    mac_version = json.loads(mac_conf.read_text())['version']
-    win_version = json.loads(win_conf.read_text())['version']
-    current_release = max(mac_version, win_version, key=parse)
+          if release_version_file.exists():
+              current_release = release_version_file.read_text().strip()
+          else:
+              mac_version = json.loads(mac_conf.read_text())['version']
+              win_version = json.loads(win_conf.read_text())['version']
+              current_release = max(mac_version, win_version, key=parse)
 
-next_version = bump_patch(current_release)
-release_version_file.write_text(next_version + "\n")
+          next_version = bump_patch(current_release)
+          release_version_file.write_text(next_version + "\n")
 
-def update_tauri_conf(path: Path, version: str):
-    conf = json.loads(path.read_text())
-    conf['version'] = version
-    path.write_text(json.dumps(conf, indent=2) + "\n")
+          def update_tauri_conf(path: Path, version: str):
+              conf = json.loads(path.read_text())
+              conf['version'] = version
+              path.write_text(json.dumps(conf, indent=2) + "\n")
 
-def update_cargo_toml(path: Path, version: str):
-    lines = path.read_text().splitlines()
-    out = []
-    in_package = False
-    changed = False
-    for line in lines:
-        stripped = line.strip()
-        if stripped == '[package]':
-            in_package = True
-            out.append(line)
-            continue
-        if in_package and stripped.startswith('[') and stripped != '[package]':
-            in_package = False
-        if in_package and stripped.startswith('version = '):
-            out.append(f'version = "{version}"')
-            changed = True
-        else:
-            out.append(line)
-    if not changed:
-        raise SystemExit(f'Could not update package version in {path}')
-    path.write_text("\n".join(out) + "\n")
+          def update_cargo_toml(path: Path, version: str):
+              lines = path.read_text().splitlines()
+              out = []
+              in_package = False
+              changed = False
+              for line in lines:
+                  stripped = line.strip()
+                  if stripped == '[package]':
+                      in_package = True
+                      out.append(line)
+                      continue
+                  if in_package and stripped.startswith('[') and stripped != '[package]':
+                      in_package = False
+                  if in_package and stripped.startswith('version = '):
+                      out.append(f'version = "{version}"')
+                      changed = True
+                  else:
+                      out.append(line)
+              if not changed:
+                  raise SystemExit(f'Could not update package version in {path}')
+              path.write_text("\n".join(out) + "\n")
 
-if build_mac:
-    update_tauri_conf(mac_conf, next_version)
-    update_cargo_toml(mac_cargo, next_version)
+          if build_mac:
+              update_tauri_conf(mac_conf, next_version)
+              update_cargo_toml(mac_cargo, next_version)
 
-if build_windows:
-    update_tauri_conf(win_conf, next_version)
-    update_cargo_toml(win_cargo, next_version)
+          if build_windows:
+              update_tauri_conf(win_conf, next_version)
+              update_cargo_toml(win_cargo, next_version)
 
-print(next_version)
-PY
-)
+          print(next_version)
+          PY
+          )
 
           BRANCH="${GITHUB_REF_NAME}"
           if [ "$BRANCH" = "dev" ]; then
@@ -174,9 +174,7 @@ PY
             git add apps/windows/src-tauri/tauri.conf.json apps/windows/src-tauri/Cargo.toml
           fi
 
-          if git diff --cached --quiet; then
-            echo "No version changes to commit"
-          else
+          if ! git diff --cached --quiet; then
             git commit -m "chore(ci): bump release version to ${VERSION} [skip ci]"
             git push origin "$BRANCH"
           fi
