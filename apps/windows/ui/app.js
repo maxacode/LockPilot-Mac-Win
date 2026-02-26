@@ -1,6 +1,5 @@
 const { invoke } = window.__TAURI__.core;
 const { getVersion } = window.__TAURI__.app;
-const { listen } = window.__TAURI__.event;
 
 const form = document.getElementById("timer-form");
 const actionInput = document.getElementById("action");
@@ -38,22 +37,11 @@ const rollbackVersionSelect = document.getElementById("rollback-version");
 const rollbackInstallBtn = document.getElementById("rollback-install");
 const updateLoadingEl = document.getElementById("update-loading");
 const updateLoadingTextEl = document.getElementById("update-loading-text");
-const preActionModalEl = document.getElementById("pre-action-modal");
-const preActionTitleEl = document.getElementById("pre-action-title");
-const preActionLineEl = document.getElementById("pre-action-line");
-const preActionSnoozeBtn = document.getElementById("pre-action-snooze");
-const preActionSkipBtn = document.getElementById("pre-action-skip");
-const preActionRunBtn = document.getElementById("pre-action-run");
 
 const AUTO_UPDATE_KEY = "lockpilot.autoCheckUpdates";
 const UPDATE_CHANNEL_KEY = "lockpilot.updateChannel";
 let currentVersion = "";
 let latestUpdate = null;
-let activePreActionPromptId = null;
-let activePreActionActionLabel = "";
-let activePreActionSnoozeMinutes = 10;
-let preActionCountdown = 0;
-let preActionCountdownInterval = null;
 
 const getPreWarningInputs = () => document.querySelectorAll('input[name="prewarn"]');
 
@@ -68,78 +56,6 @@ const actionLabel = (action) => {
     return "Restart";
   }
   return "Action";
-};
-
-const renderPreActionLine = () => {
-  if (!preActionLineEl) {
-    return;
-  }
-  preActionLineEl.textContent = `${activePreActionActionLabel} in ${Math.max(0, preActionCountdown)}s`;
-};
-
-const clearPreActionCountdown = () => {
-  if (preActionCountdownInterval) {
-    window.clearInterval(preActionCountdownInterval);
-    preActionCountdownInterval = null;
-  }
-};
-
-const closePreActionModal = () => {
-  clearPreActionCountdown();
-  if (preActionModalEl) {
-    preActionModalEl.classList.add("hidden");
-  }
-  activePreActionPromptId = null;
-};
-
-const openPreActionModal = (payload) => {
-  activePreActionPromptId = payload.promptId;
-  activePreActionActionLabel = actionLabel(payload.action);
-  activePreActionSnoozeMinutes = Number(payload.snoozeMinutes || 10);
-  preActionCountdown = Number(payload.countdownSeconds || 12);
-  if (preActionTitleEl) {
-    preActionTitleEl.textContent = `${activePreActionActionLabel} incoming`;
-  }
-  if (preActionSnoozeBtn) {
-    preActionSnoozeBtn.textContent = `Snooze ${activePreActionSnoozeMinutes} min`;
-  }
-  const warningMinutes = Number(payload.warningMinutes || 0);
-  if (preActionLineEl) {
-    preActionLineEl.textContent =
-      warningMinutes > 0
-        ? `${activePreActionActionLabel} in ${warningMinutes} min`
-        : `${activePreActionActionLabel} in under 1 min`;
-  }
-  if (preActionModalEl) {
-    preActionModalEl.classList.remove("hidden");
-  }
-
-  clearPreActionCountdown();
-  preActionCountdownInterval = window.setInterval(() => {
-    preActionCountdown -= 1;
-    renderPreActionLine();
-    if (preActionCountdown <= 0) {
-      closePreActionModal();
-    }
-  }, 1000);
-};
-
-const resolvePreAction = async (decision) => {
-  if (!activePreActionPromptId) {
-    return;
-  }
-  const promptId = activePreActionPromptId;
-  closePreActionModal();
-  try {
-    await invoke("resolve_pre_action", {
-      request: {
-        promptId,
-        decision,
-      },
-    });
-  } catch (err) {
-    showStatus(`Could not resolve warning: ${String(err)}`, true);
-  }
 };
 
 const showStatus = (text, isError = false) => {
@@ -361,8 +277,12 @@ const renderUpdateResult = (update) => {
   latestUpdate = update;
   updateResultEl.classList.remove("hidden");
   latestVersionEl.textContent = update.tag;
-  latestNotesEl.textContent = update.notes?.trim()
-    ? update.notes.trim()
+  const trimmedNotes = update.notes?.trim() ?? "";
+  const notesWithoutBuildMeta = trimmedNotes
+    ? trimmedNotes.replace(/\n*\s*Build Metadata[\s\S]*$/i, "").trim()
+    : "";
+  latestNotesEl.textContent = notesWithoutBuildMeta
+    ? notesWithoutBuildMeta
     : "What's New:\n- Backend Adjustments\n- Optimizations";
 };
 
@@ -580,24 +500,6 @@ if (setNowBtn) {
   });
 }
 
-if (preActionSnoozeBtn) {
-  preActionSnoozeBtn.addEventListener("click", () => {
-    resolvePreAction("snooze_10");
-  });
-}
-
-if (preActionSkipBtn) {
-  preActionSkipBtn.addEventListener("click", () => {
-    resolvePreAction("cancel_action");
-  });
-}
-
-if (preActionRunBtn) {
-  preActionRunBtn.addEventListener("click", () => {
-    resolvePreAction("run_now");
-  });
-}
-
 checkUpdatesBtn.addEventListener("click", () => checkForUpdates(false));
 installLatestBtn.addEventListener("click", installChannelUpdate);
 
@@ -621,10 +523,6 @@ updateChannelSelect.addEventListener("change", () => {
 });
 
 const initialize = async () => {
-  await listen("pre_action_warning", (event) => {
-    openPreActionModal(event.payload);
-  });
-
   setTriggerToNow();
   toggleMessage();
   toggleRecurrence();

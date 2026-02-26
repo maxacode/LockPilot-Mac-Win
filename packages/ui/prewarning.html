@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LockPilot Warning</title>
+    <style>
+      :root {
+        --bg: #e7f2f6;
+        --panel: rgba(247, 253, 252, 0.95);
+        --ink: #123038;
+        --muted: #4f7480;
+        --line: rgba(161, 205, 213, 0.72);
+        --brand: #1f8cb2;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(circle at top, #f3f9fc 0%, var(--bg) 65%);
+        color: var(--ink);
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+      }
+
+      .card {
+        width: min(92vw, 420px);
+        border-radius: 20px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        box-shadow: 0 18px 40px rgba(18, 48, 56, 0.2);
+        display: grid;
+        gap: 10px;
+      }
+
+      .kicker {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.45rem;
+      }
+
+      .countdown {
+        margin-top: 6px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(31, 140, 178, 0.25);
+        background: rgba(255, 255, 255, 0.82);
+        color: var(--brand);
+        font-size: 1.65rem;
+        font-weight: 700;
+        text-align: center;
+      }
+
+      .sub {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card" aria-live="assertive">
+      <p class="kicker">Pre Warning</p>
+      <h1 id="action-label">Action incoming</h1>
+      <div id="countdown" class="countdown">00:00</div>
+      <p id="subline" class="sub">Scheduled action pending.</p>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const action = String(params.get("action") || "action").toLowerCase();
+      const warningMinutes = Number.parseInt(String(params.get("warning") || "0"), 10);
+      let remaining = Number.parseInt(String(params.get("seconds") || "0"), 10);
+
+      const actionLabelEl = document.getElementById("action-label");
+      const countdownEl = document.getElementById("countdown");
+      const sublineEl = document.getElementById("subline");
+
+      const actionMap = {
+        lock: "Lock screen is coming",
+        shutdown: "Shutdown is coming",
+        reboot: "Restart is coming",
+        popup: "Popup message is coming",
+      };
+
+      const formatTime = (seconds) => {
+        const clamped = Math.max(0, seconds);
+        const minutes = Math.floor(clamped / 60);
+        const secs = clamped % 60;
+        const mm = String(minutes).padStart(2, "0");
+        const ss = String(secs).padStart(2, "0");
+        return `${mm}:${ss}`;
+      };
+
+      actionLabelEl.textContent = actionMap[action] || "Scheduled action is coming";
+      sublineEl.textContent = warningMinutes > 0
+        ? `Warning started ${warningMinutes} minute${warningMinutes === 1 ? "" : "s"} before run time.`
+        : "Scheduled action pending.";
+
+      const tick = () => {
+        countdownEl.textContent = formatTime(remaining);
+        if (remaining <= 0) {
+          window.close();
+          return;
+        }
+        remaining -= 1;
+      };
+
+      tick();
+      window.setInterval(tick, 1000);
+    </script>
+  </body>
+</html>

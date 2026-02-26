@@ -15,7 +15,7 @@ use chrono::{DateTime, Datelike, Duration as ChronoDuration, TimeZone, Utc, Week
 use reqwest::blocking::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use uuid::Uuid;
 
 const GITHUB_OWNER: &str = "maxacode";
@@ -63,6 +63,7 @@ struct TimerInfo {
     action: TimerAction,
     target_time: DateTime<Utc>,
     recurrence: Option<RecurrenceConfig>,
+    pre_warning_minutes: Option<Vec<u32>>,
     message: Option<String>,
     created_at: DateTime<Utc>,
 }
@@ -73,6 +74,7 @@ struct CreateTimerRequest {
     action: TimerAction,
     target_time: String,
     recurrence: Option<RecurrenceConfig>,
+    pre_warning_minutes: Option<Vec<u32>>,
     message: Option<String>,
 }
 
@@ -81,10 +83,50 @@ struct TimerEntry {
     cancel_tx: mpsc::Sender<()>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum PreActionDecision {
+    RunNow,
+    Snooze10,
+    CancelAction,
+    ContinueScheduled,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ResolvePreActionRequest {
+    prompt_id: String,
+    decision: PreActionDecision,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PreActionWarningPayload {
+    prompt_id: String,
+    timer_id: String,
+    action: TimerAction,
+    warning_minutes: u32,
+    countdown_seconds: u32,
+    snooze_minutes: u32,
+}
+
 #[derive(Clone)]
 struct TimerStore {
     inner: Arc<Mutex<HashMap<String, TimerEntry>>>,
     storage_path: Arc<PathBuf>,
+}
+
+#[derive(Clone)]
+struct PreActionStore {
+    inner: Arc<Mutex<HashMap<String, mpsc::Sender<PreActionDecision>>>>,
+}
+
+impl PreActionStore {
+    fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
 }
 
 impl TimerStore {
@@ -200,7 +242,33 @@ fn cancel_timer(id: String, state: State<'_, TimerStore>) -> Result<bool, String
 }
 
 #[tauri::command]
-fn create_timer(request: CreateTimerRequest, state: State<'_, TimerStore>) -> Result<TimerInfo, String> {
+fn resolve_pre_action(
+    request: ResolvePreActionRequest,
+    state: State<'_, PreActionStore>,
+) -> Result<bool, String> {
+    let sender = {
+        let mut pending = state
+            .inner
+            .lock()
+            .map_err(|_| "Failed to lock pre-action store".to_string())?;
+        pending.remove(&request.prompt_id)
+    };
+
+    if let Some(tx) = sender {
+        let _ = tx.send(request.decision);
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+#[tauri::command]
+fn create_timer(
+    app: tauri::AppHandle,
+    request: CreateTimerRequest,
+    state: State<'_, TimerStore>,
+    pre_action_state: State<'_, PreActionStore>,
+) -> Result<TimerInfo, String> {
     let target = DateTime::parse_from_rfc3339(&request.target_time)
         .map_err(|_| "Invalid date/time format".to_string())?
         .with_timezone(&Utc);
@@ -211,6 +279,7 @@ fn create_timer(request: CreateTimerRequest, state: State<'_, TimerStore>) -> Re
     }
 
     validate_recurrence(request.recurrence.as_ref())?;
+    let pre_warning_minutes = normalize_pre_warning_minutes(request.pre_warning_minutes.as_ref())?;
 
     let id = Uuid::new_v4().to_string();
     let recurrence = request.recurrence.clone();
@@ -219,6 +288,7 @@ fn create_timer(request: CreateTimerRequest, state: State<'_, TimerStore>) -> Re
         action: request.action,
         target_time: target,
         recurrence: recurrence.clone(),
+        pre_warning_minutes: pre_warning_minutes.clone(),
         message: request.message.map(|msg| msg.trim().to_string()),
         created_at: now,
     };
@@ -242,6 +312,8 @@ fn create_timer(request: CreateTimerRequest, state: State<'_, TimerStore>) -> Re
 
     state.persist()?;
     schedule_timer_thread(
+        app.clone(),
+        pre_action_state.inner.clone(),
         state.inner.clone(),
         state.storage_path.as_ref(),
         id.clone(),
@@ -255,6 +327,8 @@ fn create_timer(request: CreateTimerRequest, state: State<'_, TimerStore>) -> Re
 }
 
 fn schedule_timer_thread(
+    app: tauri::AppHandle,
+    pre_action_store: Arc<Mutex<HashMap<String, mpsc::Sender<PreActionDecision>>>>,
     store: Arc<Mutex<HashMap<String, TimerEntry>>>,
     storage_path: &Path,
     id: String,
@@ -266,17 +340,76 @@ fn schedule_timer_thread(
     let storage_path = storage_path.to_path_buf();
     thread::spawn(move || {
         let mut next_run = initial_target;
-        loop {
-            let wait = match (next_run - Utc::now()).to_std() {
-                Ok(duration) => duration,
-                Err(_) => Duration::from_secs(0),
-            };
+        let warning_minutes = normalize_pre_warning_minutes(task_info.pre_warning_minutes.as_ref())
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        'timer_loop: loop {
+            let mut should_execute_action = true;
+            if should_show_pre_action_warning(&task_info.action) && !warning_minutes.is_empty() {
+                if let Some(minutes) = warning_minutes.iter().max().copied() {
+                    let warning_time = next_run - ChronoDuration::minutes(minutes as i64);
+                    let now = Utc::now();
+                    if warning_time > now {
+                        let wait = match (warning_time - now).to_std() {
+                            Ok(duration) => duration,
+                            Err(_) => Duration::from_secs(0),
+                        };
+                        if cancel_rx.recv_timeout(wait).is_ok() {
+                            close_pre_action_window(&app, &id);
+                            return;
+                        }
+                    }
 
-            if cancel_rx.recv_timeout(wait).is_ok() {
-                break;
+                    let decision = request_pre_action_decision(
+                        &app,
+                        &pre_action_store,
+                        &id,
+                        &task_info.action,
+                        minutes,
+                    );
+                    match decision {
+                        PreActionDecision::RunNow => {
+                            close_pre_action_window(&app, &id);
+                            run_action(&task_info.action, task_info.message.as_deref());
+                            should_execute_action = false;
+                        }
+                        PreActionDecision::Snooze10 => {
+                            close_pre_action_window(&app, &id);
+                            next_run = Utc::now() + ChronoDuration::minutes(10);
+                            if let Ok(mut locked) = store.lock() {
+                                if let Some(entry) = locked.get_mut(&id) {
+                                    entry.info.target_time = next_run;
+                                } else {
+                                    return;
+                                }
+                            }
+                            let _ = persist_inner_store(&store, &storage_path);
+                            continue 'timer_loop;
+                        }
+                        PreActionDecision::CancelAction => {
+                            close_pre_action_window(&app, &id);
+                            should_execute_action = false;
+                        }
+                        PreActionDecision::ContinueScheduled => {
+                            close_pre_action_window(&app, &id);
+                        }
+                    }
+                }
             }
 
-            run_action(&task_info.action, task_info.message.as_deref());
+            if should_execute_action {
+                let wait = match (next_run - Utc::now()).to_std() {
+                    Ok(duration) => duration,
+                    Err(_) => Duration::from_secs(0),
+                };
+                if cancel_rx.recv_timeout(wait).is_ok() {
+                    close_pre_action_window(&app, &id);
+                    break;
+                }
+                close_pre_action_window(&app, &id);
+                run_action(&task_info.action, task_info.message.as_deref());
+            }
 
             let Some(recurrence_cfg) = recurrence.as_ref() else {
                 if let Ok(mut locked) = store.lock() {
@@ -306,6 +439,127 @@ fn schedule_timer_thread(
             let _ = persist_inner_store(&store, &storage_path);
         }
     });
+}
+
+fn should_show_pre_action_warning(action: &TimerAction) -> bool {
+    matches!(
+        action,
+        TimerAction::Lock | TimerAction::Shutdown | TimerAction::Reboot | TimerAction::Popup
+    )
+}
+
+fn pre_action_window_label(timer_id: &str) -> String {
+    format!("prewarning-{timer_id}")
+}
+
+fn open_pre_action_window(
+    app: &tauri::AppHandle,
+    timer_id: &str,
+    action: &TimerAction,
+    warning_minutes: u32,
+    countdown_seconds: u32,
+) {
+    let label = pre_action_window_label(timer_id);
+    if let Some(existing) = app.get_webview_window(&label) {
+        let _ = existing.set_focus();
+        let _ = existing.show();
+        return;
+    }
+
+    let action_key = match action {
+        TimerAction::Lock => "lock",
+        TimerAction::Shutdown => "shutdown",
+        TimerAction::Reboot => "reboot",
+        TimerAction::Popup => "popup",
+    };
+    let url = format!(
+        "prewarning.html?action={action_key}&warning={warning_minutes}&seconds={countdown_seconds}"
+    );
+
+    let _ = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
+        .title("LockPilot - Pre Warning")
+        .inner_size(420.0, 250.0)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .always_on_top(true)
+        .visible(true)
+        .focused(true)
+        .build();
+}
+
+fn close_pre_action_window(app: &tauri::AppHandle, timer_id: &str) {
+    let label = pre_action_window_label(timer_id);
+    if let Some(window) = app.get_webview_window(&label) {
+        let _ = window.close();
+    }
+}
+
+fn request_pre_action_decision(
+    app: &tauri::AppHandle,
+    pre_action_store: &Arc<Mutex<HashMap<String, mpsc::Sender<PreActionDecision>>>>,
+    timer_id: &str,
+    action: &TimerAction,
+    warning_minutes: u32,
+) -> PreActionDecision {
+    let prompt_id = Uuid::new_v4().to_string();
+    let (tx, rx) = mpsc::channel::<PreActionDecision>();
+
+    if let Ok(mut pending) = pre_action_store.lock() {
+        pending.insert(prompt_id.clone(), tx);
+    } else {
+        return PreActionDecision::ContinueScheduled;
+    }
+
+    let countdown_seconds = warning_minutes.saturating_mul(60).max(1);
+    open_pre_action_window(app, timer_id, action, warning_minutes, countdown_seconds);
+
+    let payload = PreActionWarningPayload {
+        prompt_id: prompt_id.clone(),
+        timer_id: timer_id.to_string(),
+        action: action.clone(),
+        warning_minutes,
+        countdown_seconds,
+        snooze_minutes: 10,
+    };
+
+    if app.emit("pre_action_warning", payload).is_err() {
+        if let Ok(mut pending) = pre_action_store.lock() {
+            pending.remove(&prompt_id);
+        }
+        return PreActionDecision::ContinueScheduled;
+    }
+
+    match rx.recv_timeout(Duration::from_secs(countdown_seconds as u64)) {
+        Ok(decision) => decision,
+        Err(_) => {
+            if let Ok(mut pending) = pre_action_store.lock() {
+                pending.remove(&prompt_id);
+            }
+            PreActionDecision::ContinueScheduled
+        }
+    }
+}
+
+fn normalize_pre_warning_minutes(values: Option<&Vec<u32>>) -> Result<Option<Vec<u32>>, String> {
+    let Some(values) = values else {
+        return Ok(None);
+    };
+
+    let mut normalized: Vec<u32> = values
+        .iter()
+        .copied()
+        .filter(|value| matches!(value, 1 | 5 | 10))
+        .collect();
+
+    normalized.sort_unstable();
+    normalized.dedup();
+
+    if normalized.len() != values.len() {
+        return Err("Pre-warning options must be any of: 1, 5, 10 minutes.".to_string());
+    }
+
+    Ok(Some(normalized))
 }
 
 #[tauri::command]
@@ -598,7 +852,11 @@ fn persist_inner_store(store: &Arc<Mutex<HashMap<String, TimerEntry>>>, storage_
     Ok(())
 }
 
-fn restore_timers(store: &TimerStore) -> Result<(), String> {
+fn restore_timers(
+    store: &TimerStore,
+    app: &tauri::AppHandle,
+    pre_action_store: &PreActionStore,
+) -> Result<(), String> {
     let restored = store.load_persisted_infos()?;
     if restored.is_empty() {
         return Ok(());
@@ -641,6 +899,8 @@ fn restore_timers(store: &TimerStore) -> Result<(), String> {
         }
 
         schedule_timer_thread(
+            app.clone(),
+            pre_action_store.inner.clone(),
             store.inner.clone(),
             store.storage_path.as_ref(),
             info.id.clone(),
@@ -791,16 +1051,19 @@ fn main() {
     tauri::Builder::default()
         .setup(|app| {
             let store = TimerStore::new(timer_storage_path(app.handle()));
-            if let Err(err) = restore_timers(&store) {
+            let pre_action_store = PreActionStore::new();
+            if let Err(err) = restore_timers(&store, app.handle(), &pre_action_store) {
                 eprintln!("Failed to restore timers: {err}");
             }
             app.manage(store);
+            app.manage(pre_action_store);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             create_timer,
             list_timers,
             cancel_timer,
+            resolve_pre_action,
             list_release_versions,
             check_channel_update,
             install_channel_update,
