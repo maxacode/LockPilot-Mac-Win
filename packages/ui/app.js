@@ -24,6 +24,8 @@ const latestNotesEl = document.getElementById("latest-notes");
 const installLatestBtn = document.getElementById("install-latest");
 const rollbackVersionSelect = document.getElementById("rollback-version");
 const rollbackInstallBtn = document.getElementById("rollback-install");
+const updateLoadingEl = document.getElementById("update-loading");
+const updateLoadingTextEl = document.getElementById("update-loading-text");
 
 const AUTO_UPDATE_KEY = "lockpilot.autoCheckUpdates";
 const UPDATE_CHANNEL_KEY = "lockpilot.updateChannel";
@@ -42,6 +44,16 @@ const showUpdateStatus = (text, isError = false) => {
 };
 
 const selectedChannel = () => updateChannelSelect.value;
+
+const setUpdateLoading = (loading, text = "Downloading update...") => {
+  updateLoadingTextEl.textContent = text;
+  updateLoadingEl.classList.toggle("hidden", !loading);
+  installLatestBtn.disabled = loading;
+  rollbackInstallBtn.disabled = loading;
+  checkUpdatesBtn.disabled = loading;
+  updateChannelSelect.disabled = loading;
+  rollbackVersionSelect.disabled = loading;
+};
 
 const toLocalDateTimeValue = (date) => {
   const pad = (n) => String(n).padStart(2, "0");
@@ -235,19 +247,25 @@ const installChannelUpdate = async () => {
   const channel = selectedChannel();
 
   try {
+    setUpdateLoading(true, `Downloading ${channel} update...`);
     const result = await invoke("install_channel_update", { channel });
-    showUpdateStatus(`${result}. Complete install from the opened DMG.`);
+    showUpdateStatus(`${result}. Complete install from the opened installer.`);
   } catch (err) {
     showUpdateStatus(`Install failed: ${String(err)}`, true);
+  } finally {
+    setUpdateLoading(false);
   }
 };
 
 const installTag = async (tag) => {
   try {
+    setUpdateLoading(true, `Downloading ${tag}...`);
     const result = await invoke("install_release", { tag });
-    showUpdateStatus(`${result}. Complete install from the opened DMG.`);
+    showUpdateStatus(`${result}. Complete install from the opened installer.`);
   } catch (err) {
     showUpdateStatus(`Install failed: ${String(err)}`, true);
+  } finally {
+    setUpdateLoading(false);
   }
 };
 
