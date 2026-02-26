@@ -4,9 +4,17 @@ const { getVersion } = window.__TAURI__.app;
 const form = document.getElementById("timer-form");
 const actionInput = document.getElementById("action");
 const targetTimeInput = document.getElementById("target-time");
+const setNowBtn = document.getElementById("set-now");
 const recurrencePresetInput = document.getElementById("recurrence-preset");
+const actionChoiceBoxes = document.querySelectorAll(".choice-box[data-action]");
+const recurrenceChoiceBoxes = document.querySelectorAll(".choice-box[data-recurrence]");
+const quickChipButtons = document.querySelectorAll("[data-quick-minutes]");
+const quickCustomInput = document.getElementById("custom-minutes-input");
+const quickCustomApplyBtn = document.getElementById("quick-custom-apply");
 const intervalWrap = document.getElementById("interval-wrap");
 const intervalHoursInput = document.getElementById("interval-hours");
+const specificDaysWrap = document.getElementById("specific-days-wrap");
+const specificDayInputs = document.querySelectorAll('input[name="specific-day"]');
 const messageWrap = document.getElementById("message-wrap");
 const messageInput = document.getElementById("message");
 const timersEl = document.getElementById("timers");
@@ -29,7 +37,6 @@ const updateLoadingTextEl = document.getElementById("update-loading-text");
 
 const AUTO_UPDATE_KEY = "lockpilot.autoCheckUpdates";
 const UPDATE_CHANNEL_KEY = "lockpilot.updateChannel";
-const LAUNCH_TIME = new Date();
 let currentVersion = "";
 let latestUpdate = null;
 
@@ -60,10 +67,48 @@ const toLocalDateTimeValue = (date) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 };
 
+const setTriggerToNow = () => {
+  targetTimeInput.value = toLocalDateTimeValue(new Date());
+};
+
+const parseLocalDateTimeValue = (value) => {
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const applyQuickIncrement = (minutes, fromNow = false) => {
+  const base = parseLocalDateTimeValue(targetTimeInput.value) ?? new Date();
+  const start = fromNow ? new Date() : base;
+  let next = new Date(base.getTime() + minutes * 60000);
+  if (fromNow) {
+    next = new Date(start.getTime() + minutes * 60000);
+  }
+  const minAllowed = new Date(Date.now() + 60000);
+  if (next < minAllowed) {
+    next = minAllowed;
+  }
+  targetTimeInput.value = toLocalDateTimeValue(next);
+};
+
 const toggleMessage = () => {
   const isPopup = actionInput.value === "popup";
-  messageWrap.style.display = isPopup ? "grid" : "none";
-  messageInput.required = isPopup;
+  messageWrap.classList.toggle("is-blank", !isPopup);
+  messageInput.required = false;
+};
+
+const syncActionChoices = () => {
+  actionChoiceBoxes.forEach((box) => {
+    box.classList.toggle("is-active", box.dataset.action === actionInput.value);
+  });
+};
+
+const syncRecurrenceChoices = () => {
+  recurrenceChoiceBoxes.forEach((box) => {
+    box.classList.toggle("is-active", box.dataset.recurrence === recurrencePresetInput.value);
+  });
 };
 
 const toggleRecurrence = () => {
@@ -71,12 +116,15 @@ const toggleRecurrence = () => {
   const needsInterval =
     recurrencePresetInput.value === "every_n_hours" ||
     recurrencePresetInput.value === "every_n_minutes";
+  const needsSpecificDays = recurrencePresetInput.value === "specific_days";
   intervalWrap.classList.toggle("hidden", !needsInterval);
+  specificDaysWrap.classList.toggle("hidden", !needsSpecificDays);
   intervalHoursInput.required = needsInterval;
   intervalHoursInput.max = recurrencePresetInput.value === "every_n_minutes" ? "1440" : "24";
 
   if (!recurring) {
     intervalWrap.classList.add("hidden");
+    specificDaysWrap.classList.add("hidden");
   }
 };
 
@@ -106,6 +154,22 @@ const recurrenceLabel = (recurrence) => {
 
   if (recurrence.preset === "weekdays") {
     return "Repeats weekdays";
+  }
+
+  if (recurrence.preset === "specific_days") {
+    const shortToLong = {
+      mon: "Mon",
+      tue: "Tue",
+      wed: "Wed",
+      thu: "Thu",
+      fri: "Fri",
+      sat: "Sat",
+      sun: "Sun",
+    };
+    const days = (recurrence.daysOfWeek ?? [])
+      .map((day) => shortToLong[day] ?? day)
+      .join(", ");
+    return days ? `Repeats on ${days}` : "Repeats on specific days";
   }
 
   if (recurrence.preset === "every_n_hours") {
@@ -278,12 +342,22 @@ form.addEventListener("submit", async (event) => {
   }
 
   const recurrencePreset = recurrencePresetInput.value;
+  const selectedSpecificDays = [...specificDayInputs]
+    .filter((input) => input.checked)
+    .map((input) => input.value);
+
+  if (recurrencePreset === "specific_days" && !selectedSpecificDays.length) {
+    showStatus("Select at least one day for Specific Days.", true);
+    return;
+  }
+
   let recurrence = null;
   if (recurrencePreset !== "none") {
     recurrence = {
       preset: recurrencePreset,
       intervalHours: recurrencePreset === "every_n_hours" ? Number(intervalHoursInput.value || 0) : null,
       intervalMinutes: recurrencePreset === "every_n_minutes" ? Number(intervalHoursInput.value || 0) : null,
+      daysOfWeek: recurrencePreset === "specific_days" ? selectedSpecificDays : null,
     };
   }
 
@@ -295,13 +369,21 @@ form.addEventListener("submit", async (event) => {
   };
 
   try {
+    const selectedAction = actionInput.value;
+    const selectedTargetTime = targetTimeInput.value;
     await invoke("create_timer", { request });
     form.reset();
-    targetTimeInput.value = toLocalDateTimeValue(LAUNCH_TIME);
+    actionInput.value = selectedAction;
+    targetTimeInput.value = selectedTargetTime;
     recurrencePresetInput.value = "none";
     intervalHoursInput.value = "2";
+    specificDayInputs.forEach((input) => {
+      input.checked = false;
+    });
     toggleMessage();
     toggleRecurrence();
+    syncActionChoices();
+    syncRecurrenceChoices();
     showStatus("Timer created.");
     await loadTimers();
   } catch (err) {
@@ -312,6 +394,59 @@ form.addEventListener("submit", async (event) => {
 refreshBtn.addEventListener("click", loadTimers);
 actionInput.addEventListener("change", toggleMessage);
 recurrencePresetInput.addEventListener("change", toggleRecurrence);
+actionInput.addEventListener("change", syncActionChoices);
+recurrencePresetInput.addEventListener("change", syncRecurrenceChoices);
+
+actionChoiceBoxes.forEach((box) => {
+  box.addEventListener("click", () => {
+    const value = box.dataset.action;
+    if (!value) {
+      return;
+    }
+    actionInput.value = value;
+    toggleMessage();
+    syncActionChoices();
+  });
+});
+
+recurrenceChoiceBoxes.forEach((box) => {
+  box.addEventListener("click", () => {
+    const value = box.dataset.recurrence;
+    if (!value) {
+      return;
+    }
+    recurrencePresetInput.value = value;
+    toggleRecurrence();
+    syncRecurrenceChoices();
+  });
+});
+
+quickChipButtons.forEach((chip) => {
+  chip.addEventListener("click", () => {
+    const minutes = Number(chip.dataset.quickMinutes);
+    if (!Number.isInteger(minutes) || minutes <= 0) {
+      return;
+    }
+    applyQuickIncrement(minutes);
+  });
+});
+
+if (quickCustomApplyBtn) {
+  quickCustomApplyBtn.addEventListener("click", () => {
+    const minutes = Number.parseInt(String(quickCustomInput?.value || ""), 10);
+    if (!Number.isInteger(minutes) || minutes <= 0) {
+      showStatus("Custom increment must be a positive number of minutes.", true);
+      return;
+    }
+    applyQuickIncrement(minutes);
+  });
+}
+
+if (setNowBtn) {
+  setNowBtn.addEventListener("click", () => {
+    setTriggerToNow();
+  });
+}
 
 checkUpdatesBtn.addEventListener("click", () => checkForUpdates(false));
 installLatestBtn.addEventListener("click", installChannelUpdate);
@@ -336,9 +471,11 @@ updateChannelSelect.addEventListener("change", () => {
 });
 
 const initialize = async () => {
-  targetTimeInput.value = toLocalDateTimeValue(LAUNCH_TIME);
+  setTriggerToNow();
   toggleMessage();
   toggleRecurrence();
+  syncActionChoices();
+  syncRecurrenceChoices();
   await loadTimers();
   setInterval(loadTimers, 1000);
 

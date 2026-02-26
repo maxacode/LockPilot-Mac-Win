@@ -9,11 +9,10 @@
   <body>
     <main class="app">
       <section class="card">
-        <h1>LockPilot by Maks Derevencha 👾 </h1>
-        <p class="subtitle">Schedule multiple system actions for exact times.</p>
+        <h1>LockPilot - Made by Maks 👾 </h1>
 
         <form id="timer-form" class="form">
-          <label>
+          <label class="legacy-hidden">
             Action
             <select id="action" required>
               <option value="popup">Popup Message</option>
@@ -22,31 +21,95 @@
               <option value="reboot">Restart Mac</option>
             </select>
           </label>
+          <section class="choice-preview" aria-label="Action options preview">
+            <div class="preview-head">
+              <strong>Action</strong>
+            </div>
+            <div class="choice-grid choice-grid-4">
+              <button type="button" class="choice-box is-active" data-action="popup">Popup Message</button>
+              <button type="button" class="choice-box" data-action="lock">Lock Screen</button>
+              <button type="button" class="choice-box" data-action="shutdown">Shut Down</button>
+              <button type="button" class="choice-box" data-action="reboot">Restart</button>
+            </div>
+          </section>
 
-          <label>
-            Trigger Time
-            <input id="target-time" type="datetime-local" step="1" required />
-          </label>
+          <div class="time-message-row">
+            <label>
+              Trigger Time
+              <span class="trigger-time-inline">
+                <input id="target-time" type="datetime-local" step="1" required />
+                <button type="button" id="set-now" class="secondary now-btn">Now</button>
+              </span>
+            </label>
 
-          <label>
+            <label id="message-wrap">
+              Popup Message
+              <textarea id="message" rows="1" placeholder="Time to stop and rest"></textarea>
+            </label>
+          </div>
+
+          <section class="quick-add-preview" aria-label="Quick add feature preview">
+            <div class="preview-head">
+              <strong>Quick Add Time</strong>
+            </div>
+
+            <div class="feature-grid">
+              <div class="feature-tile">
+                <span class="chip-row">
+                  <button type="button" class="chip-btn" data-quick-minutes="1">+1 min</button>
+                  <button type="button" class="chip-btn" data-quick-minutes="5">+5 min</button>
+                  <button type="button" class="chip-btn" data-quick-minutes="10">+10 min</button>
+                  <button type="button" class="chip-btn" data-quick-minutes="15">+15 min</button>
+                  <button type="button" class="chip-btn" data-quick-minutes="30">+30 min</button>
+                  <button type="button" class="chip-btn" data-quick-minutes="60">+1 hr</button>
+                  <input id="custom-minutes-input" type="number" min="1" step="1" placeholder="Custom min" />
+                  <button type="button" id="quick-custom-apply" class="quick-apply-btn">Apply</button>
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <label class="legacy-hidden">
             Repeat
             <select id="recurrence-preset">
               <option value="none">One-time</option>
               <option value="daily">Daily</option>
               <option value="weekdays">Weekdays</option>
+              <option value="specific_days">Specific Days</option>
               <option value="every_n_hours">Every N Hours</option>
               <option value="every_n_minutes">Every N Minutes</option>
             </select>
           </label>
+          <section class="choice-preview" aria-label="Repeat options preview">
+            <div class="preview-head">
+              <strong>Repeat</strong>
+            </div>
+            <div class="choice-grid">
+              <button type="button" class="choice-box is-active" data-recurrence="none">One-time</button>
+              <button type="button" class="choice-box" data-recurrence="daily">Daily</button>
+              <button type="button" class="choice-box" data-recurrence="weekdays">Weekdays</button>
+              <button type="button" class="choice-box" data-recurrence="specific_days">Specific Days</button>
+              <button type="button" class="choice-box" data-recurrence="every_n_hours">Every N Hours</button>
+              <button type="button" class="choice-box" data-recurrence="every_n_minutes">Every N Minutes</button>
+            </div>
+          </section>
 
           <label id="interval-wrap" class="hidden">
             Interval
             <input id="interval-hours" type="number" min="1" max="1440" value="2" />
           </label>
 
-          <label id="message-wrap">
-            Popup Message
-            <textarea id="message" rows="3" placeholder="Time to stop and rest" required></textarea>
+          <label id="specific-days-wrap" class="hidden">
+            Specific Days
+            <span class="weekday-grid">
+              <label class="weekday-toggle"><input type="checkbox" name="specific-day" value="mon" />Mon</label>
+              <label class="weekday-toggle"><input type="checkbox" name="specific-day" value="tue" />Tue</label>
+              <label class="weekday-toggle"><input type="checkbox" name="specific-day" value="wed" />Wed</label>
+              <label class="weekday-toggle"><input type="checkbox" name="specific-day" value="thu" />Thu</label>
+              <label class="weekday-toggle"><input type="checkbox" name="specific-day" value="fri" />Fri</label>
+              <label class="weekday-toggle"><input type="checkbox" name="specific-day" value="sat" />Sat</label>
+              <label class="weekday-toggle"><input type="checkbox" name="specific-day" value="sun" />Sun</label>
+            </span>
           </label>
 
           <button type="submit">Add Timer</button>
