@@ -310,3 +310,79 @@ jobs:
           name: lockpilot-windows-${{ needs.prepare_release.outputs.tag }}-${{ github.sha }}
           path: |
             apps/windows/src-tauri/target/release/bundle/**
+
+  update_readme_links:
+    needs: [prepare_release, build_mac, build_windows]
+    if: ${{ needs.prepare_release.outputs.has_changes == 'true' && (needs.build_mac.result == 'success' || needs.build_windows.result == 'success') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout latest branch head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Update README direct download links
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare_release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RELEASE_JSON="$(gh api "repos/${REPO}/releases/tags/${TAG}")"
+          RELEASE_PAGE_URL="https://github.com/${REPO}/releases/tag/${TAG}"
+
+          MAC_URL="$(echo "${RELEASE_JSON}" | jq -r '.assets[] | select(.name | test("\\.dmg$")) | .browser_download_url' | head -n1 || true)"
+          WIN_URL="$(echo "${RELEASE_JSON}" | jq -r '.assets[] | select(.name | test("(-setup\\.exe$|\\.msi$|\\.exe$)"; "i")) | .browser_download_url' | head -n1 || true)"
+
+          if [ -z "${MAC_URL}" ]; then
+            MAC_URL="${RELEASE_PAGE_URL}"
+          fi
+          if [ -z "${WIN_URL}" ]; then
+            WIN_URL="${RELEASE_PAGE_URL}"
+          fi
+
+          export MAC_URL WIN_URL
+
+          python3 <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path("README.md")
+          text = path.read_text()
+
+          mac_url = os.environ["MAC_URL"]
+          win_url = os.environ["WIN_URL"]
+
+          text = re.sub(
+              r"^## \[Download for macOS\]\([^)]+\)$",
+              f"## [Download for macOS]({mac_url})",
+              text,
+              flags=re.MULTILINE,
+          )
+          text = re.sub(
+              r"^## \[Download for Windows\]\([^)]+\)$",
+              f"## [Download for Windows]({win_url})",
+              text,
+              flags=re.MULTILINE,
+          )
+
+          path.write_text(text)
+          PY
+
+      - name: Commit README link update
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet README.md; then
+            echo "README links already up to date."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs(ci): update direct download links for ${{ needs.prepare_release.outputs.tag }} [skip ci]"
+          git push origin "${GITHUB_REF_NAME}"
