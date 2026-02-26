@@ -191,30 +191,10 @@ PY
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
 
-  build_release:
+  build_mac:
     needs: prepare_release
-    if: ${{
-      needs.prepare_release.outputs.has_changes == 'true' &&
-      (
-        (matrix.platform == 'mac' && needs.prepare_release.outputs.build_mac == 'true') ||
-        (matrix.platform == 'windows' && needs.prepare_release.outputs.build_windows == 'true')
-      )
-      }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: mac
-            os: macos-latest
-            app_dir: apps/mac
-            artifact_name: lockpilot-mac
-          - platform: windows
-            os: windows-latest
-            app_dir: apps/windows
-            artifact_name: lockpilot-windows
-
-    runs-on: ${{ matrix.os }}
-
+    if: ${{ needs.prepare_release.outputs.has_changes == 'true' && needs.prepare_release.outputs.build_mac == 'true' }}
+    runs-on: macos-latest
     steps:
       - name: Checkout latest branch head (includes version bump)
         uses: actions/checkout@v4
@@ -235,7 +215,7 @@ PY
 
       - name: Install frontend deps (if package.json exists)
         shell: bash
-        working-directory: ${{ matrix.app_dir }}
+        working-directory: apps/mac
         run: |
           if [ -f package.json ]; then
             npm ci
@@ -246,13 +226,13 @@ PY
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          projectPath: ${{ matrix.app_dir }}
+          projectPath: apps/mac
           tagName: ${{ needs.prepare_release.outputs.tag }}
           releaseName: LockPilot ${{ needs.prepare_release.outputs.tag }}
           releaseBody: |
             Automated release from `${{ github.ref_name }}`
             Version: `${{ needs.prepare_release.outputs.version }}`
-            Platform: `${{ matrix.platform }}`
+            Platform: `mac`
             Commit: `${{ github.sha }}`
           releaseDraft: false
           prerelease: ${{ needs.prepare_release.outputs.prerelease }}
@@ -260,6 +240,59 @@ PY
       - name: Upload CI artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}-${{ needs.prepare_release.outputs.tag }}-${{ github.sha }}
+          name: lockpilot-mac-${{ needs.prepare_release.outputs.tag }}-${{ github.sha }}
           path: |
-            ${{ matrix.app_dir }}/src-tauri/target/release/bundle/**
+            apps/mac/src-tauri/target/release/bundle/**
+
+  build_windows:
+    needs: prepare_release
+    if: ${{ needs.prepare_release.outputs.has_changes == 'true' && needs.prepare_release.outputs.build_windows == 'true' }}
+    runs-on: windows-latest
+    steps:
+      - name: Checkout latest branch head (includes version bump)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Sync shared UI
+        shell: bash
+        run: bash scripts/sync-shared-ui.sh
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend deps (if package.json exists)
+        shell: bash
+        working-directory: apps/windows
+        run: |
+          if [ -f package.json ]; then
+            npm ci
+          fi
+
+      - name: Build + publish release assets
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/windows
+          tagName: ${{ needs.prepare_release.outputs.tag }}
+          releaseName: LockPilot ${{ needs.prepare_release.outputs.tag }}
+          releaseBody: |
+            Automated release from `${{ github.ref_name }}`
+            Version: `${{ needs.prepare_release.outputs.version }}`
+            Platform: `windows`
+            Commit: `${{ github.sha }}`
+          releaseDraft: false
+          prerelease: ${{ needs.prepare_release.outputs.prerelease }}
+
+      - name: Upload CI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lockpilot-windows-${{ needs.prepare_release.outputs.tag }}-${{ github.sha }}
+          path: |
+            apps/windows/src-tauri/target/release/bundle/**
